@@ -59,13 +59,15 @@ function plugin(options){
         cb(); // count
         return; // do nothing
       }
-      var data = files[file];
+      var data = Object.create(files[file]);
       var dir = dirname(file);
-      var html = basename(file, extname(file)) + extension;
-      if ('.' != dir) html = dir + '/' + html;
+      var dest = basename(file, extname(file)) + extension;
+      if ('.' != dir) dest = dir + '/' + dest;
+      args.unshift("--output=" + dest);
 
       debug('Converting file %s', file);
       var md = data.contents.toString();
+      debug("from %s to %s args %s opts %s", from, to, args, opts);
       pdc(md, from, to, args, opts, function(err,res){
         if (err){
           msg = 'metalsmith-pandoc: ' + file + ' - ' + err;
@@ -73,17 +75,29 @@ function plugin(options){
           cb(msg);
           return;
         }
-        if (res === undefined || res === ''){
-          var msg = 'ERROR: nothing returned from pandoc for file ' + file;
-          debug(msg);
-          cb(new Error(msg));
-          return;
-        }
-        debug('Converted file %s. Converted: %s...', file, res.substring(0,10).replace('\n',''));
-        data.contents = new Buffer(res);
-        delete files[file];
-        files[html] = data;
-        cb();
+        fs.readFile(dest, function(err,res) {
+          if (err){
+            msg = 'metalsmith-pandoc: read ' + file + ' - ' + err;
+            debug(msg);
+            cb(msg);
+            return;
+          }
+          data.contents = new Buffer(res);
+          fs.unlink(dest, function(err) {
+            if (err){
+              msg = 'metalsmith-pandoc: unlink ' + file + ' - ' + err;
+              debug(msg);
+              cb(msg);
+              return;
+            }
+            if (!options.keep) {
+              delete files[file];
+            }
+            files[dest] = data;
+            debug('Converted file %s to %s...', file, dest);
+            cb();
+          });
+        });
       });
     }, done);
   };
